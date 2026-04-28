@@ -1,8 +1,5 @@
 # Third-Party Notices
 
-The `LuaSkills/demo-skill` repository declares one optional tool dependency:
+`vulcan-testkit` does not declare bundled tool, Lua, or FFI dependencies.
 
-- `rg` from the `BurntSushi/ripgrep` GitHub release distribution
-
-The dependency is not bundled into the repository itself.
-It is downloaded only by the LuaSkills dependency installer when the host allows network installation.
+The runtime can route validation tools such as Cargo, Go, Python, Node.js, TypeScript, npm, pnpm, and yarn when those tools are already available in the caller environment. Those tools are not redistributed by this repository.

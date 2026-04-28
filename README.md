@@ -1,34 +1,91 @@
-# demo-skill
+# vulcan-testkit
 
-A complete demo LuaSkill repository at `LuaSkills/demo-skill` for testing package installation, GitHub release packaging, version updates, uninstall behavior, and one no-op `rg` dependency.
+AI-native validation router for Vulcan coding agents.
 
-## LuaSkill development manual
+Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
-For LuaSkill runtime APIs, package rules, and development conventions, see the official development manuals:
+`vulcan-testkit` helps AI agents run bounded build, test, lint, check, and typecheck workflows without flooding the conversation with raw terminal output. It accepts explicit validation commands or an existing log, applies profile guards, parses noisy diagnostics, and returns a compact Markdown report focused on root causes and next actions.
 
-- [Lua Skill Development Manual (English)](https://github.com/LuaSkills/luaskills/blob/main/docs/skill-development.md)
-- [Lua Skill 开发手册（中文）](https://github.com/LuaSkills/luaskills/blob/main/docs/zh-CN/skill-development.md)
+## When To Use
 
-## What this repository demonstrates
+Use `vulcan-testkit` when an agent needs validation feedback that is accurate, bounded, and easy to act on:
 
-- the strict `skill.yaml` package layout
-- a required semantic `version` field in `skill.yaml`
-- a `dependencies.yaml` file with one skill-local `rg` dependency
-- multiple runtime entries under `runtime/`
-- help topics under `help/`
-- one overflow template under `overflow_templates/`
-- one resource file under `resources/`
-- GitHub Actions workflows for validation and release packaging
-- a tag-driven release workflow that only builds packages after a release tag is pushed
+- Run build, test, lint, check, or typecheck commands after code edits.
+- Compress long validation logs into root diagnostics.
+- Extract failed tests, source references, collapsed noise, and next actions.
+- Avoid pasting huge stdout/stderr logs back into the model context.
+- Prevent validation calls from quietly becoming app servers, installers, watchers, debuggers, benchmark runs, fuzzers, or write/fix commands.
 
-## Skill package layout
+Use a normal shell command instead for short, low-noise commands where the raw output is the desired answer. Use dedicated file, Git, or deployment tools for non-validation work.
+
+## Tool
+
+### `vulcan-testkit-run`
+
+Use this entry when the next action is validation.
+
+Run mode requires a direct allowlisted executable and arguments:
+
+```yaml
+program: cargo
+args:
+  - test
+cwd: path/to/project
+phase: test
+tool_hint: cargo
+```
+
+Analyze-only mode accepts an existing log:
+
+```yaml
+log: "<existing validation output>"
+phase: check
+tool_hint: cargo
+```
+
+The returned Markdown report is designed for AI reading and usually includes:
+
+- `Status`
+- `Run`
+- `Summary`
+- `Root Diagnostics`
+- `Failed Tests`
+- `Source Refs`
+- `Collapsed Noise`
+- `Next Actions`
+
+## Supported Validation Profiles
+
+TestKit is intentionally profile-limited. It allows validation-oriented command shapes and rejects command shapes that can mutate files, start long-running processes, install packages, publish artifacts, or open interactive tools.
+
+Supported families include:
+
+- Rust: `cargo check`, `cargo test`, `cargo clippy`, `cargo build`
+- Go: `go test`, `go vet`, `go build`
+- Python: `python -m pytest`, `python -m unittest`, `python -m mypy`, `python -m ruff`
+- Node: `node --check <file>`, `node --test ...`
+- TypeScript: `tsc --noEmit ...`
+- Package managers: constrained `npm`, `pnpm`, and `yarn` validation scripts
+- Analyze-only logs: routed through detector and adapter heuristics
+
+Blocked examples include app/runtime commands, package installs, project creation, formatter write/fix modes, browser-opening modes, watchers, dev servers, benchmarks, fuzz runs, and interactive debugging.
+
+## Skill Package Layout
 
 ```text
-demo-skill/
+vulcan-testkit/
 ├─ skill.yaml
 ├─ dependencies.yaml
+├─ README.md
+├─ README.zh-CN.md
 ├─ runtime/
+│  ├─ vulcan-testkit-run.lua
+│  ├─ adapters/
+│  ├─ detectors/
+│  └─ profiles/
 ├─ help/
+│  ├─ help.md
+│  └─ run.md
 ├─ overflow_templates/
 ├─ resources/
 ├─ licenses/
@@ -36,72 +93,38 @@ demo-skill/
 └─ .github/workflows/
 ```
 
-## Demo tools
-
-- `demo-status`
-  - returns stable runtime diagnostics for installation and lifecycle testing
-- `rg-check`
-  - reports the expected local `rg` dependency path and runs `rg --version` when the file exists
-- `overflow-demo`
-  - returns paged output and a skill-local overflow template hint
-
-## Demo dependency
-
-The repository declares one skill-local `rg` dependency in `dependencies.yaml`.
-
-The dependency is intentionally non-essential:
-
-- it is useful for testing install and uninstall behavior
-- it is safe to skip when network downloads are disabled
-- the `rg-check` tool can still return a diagnostic report when `rg` is missing
-
 ## Validation
 
-This repository includes one validation workflow and one release workflow.
-
-Local validation:
+Local repository validation:
 
 ```powershell
 python .\scripts\validate_skill.py
 python .\scripts\package_skill.py
 ```
 
-The default packaging script generates two artifacts under `dist/`:
+The packaging script generates release artifacts under `dist/`:
 
-- `<skill-id>-v<version>-skill.zip`
-- `<skill-id>-v<version>-checksums.txt`
+- `vulcan-testkit-v<version>-skill.zip`
+- `vulcan-testkit-v<version>-checksums.txt`
 
-For URL-based install and update tests, you can optionally generate one source metadata file:
+Optional source metadata:
 
 ```powershell
 python .\scripts\package_skill.py --emit-source-yaml
 ```
 
-That optional command adds:
+The generated metadata points to the matching `LuaSkills/vulcan-testkit` GitHub release assets unless `--base-url` is provided.
 
-- `<skill-id>-v<version>-source.yaml`
+## Release Flow
 
-If you do not pass `--base-url`, the generated `source.yaml` points to the matching `LuaSkills/demo-skill` GitHub release asset names for the current manifest version.
-
-GitHub validation:
-
-- pushes to `main` do not trigger GitHub Actions automatically
-- pull requests only run structure validation
-- no release package is published from branch pushes
-
-## Tag-based release flow
-
-This repository uses a tag-driven release flow.
-
-Only a pushed tag that matches `v*` triggers package build and GitHub release publication.
-The tag must match `skill.yaml.version`.
+Releases are tag-driven. A pushed tag matching `v*` triggers the release workflow, and the tag must match `skill.yaml.version`.
 
 Recommended local release steps:
 
 ```powershell
 python .\scripts\validate_skill.py
 python .\scripts\package_skill.py
-.\scripts\tag_release.ps1 0.1.3
+.\scripts\tag_release.ps1 0.1.0
 ```
 
 Or on Unix-like shells:
@@ -109,79 +132,12 @@ Or on Unix-like shells:
 ```bash
 python ./scripts/validate_skill.py
 python ./scripts/package_skill.py
-./scripts/tag_release.sh 0.1.3
-```
-
-The helper scripts normalize the version into a `vX.Y.Z` tag and push it to `origin`.
-The packaging script treats `skill.yaml.version` as the release version source of truth and rejects mismatched tag or CLI versions.
-GitHub release publication only uploads the zip package and checksum file.
-
-If you want to generate source metadata with an explicit release asset URL, pass a base URL together with the source-yaml flag:
-
-```powershell
-python .\scripts\package_skill.py --emit-source-yaml --base-url https://github.com/LuaSkills/demo-skill/releases/download/v0.1.3
-```
-
-## Use this demo as your own skill repository
-
-This repository is intended to be forked as the starting point for a real LuaSkill package.
-
-Recommended first-time setup:
-
-1. Fork this repository from GitHub.
-2. In the fork form, set `Repository name` to your final skill id.
-   - The repository name should match `^[a-z]([a-z0-9-]*[a-z0-9])?$`.
-   - Use lowercase letters, numbers, and single hyphen-separated words, such as `my-skill` or `demo-tools`.
-3. Set `Description` to a short description of your own skill.
-4. Click `Create fork`.
-5. Open the forked repository settings and choose `Leave fork network` so the new repository becomes an independent skill repository.
-6. Clone your own repository:
-
-```powershell
-git clone https://github.com/<your-org-or-user>/<your-skill-id>.git
-cd <your-skill-id>
-```
-
-7. Start replacing the demo content with your own skill implementation.
-8. Update `skill.yaml`:
-   - set `name` to your display name
-   - set `version` to your first release version
-9. Update runtime, help, README, and resource files if they still mention `demo-skill` or `LuaSkills/demo-skill`.
-10. Run local validation:
-
-```powershell
-python .\scripts\validate_skill.py
-python .\scripts\package_skill.py
-```
-
-11. Tag and push your release:
-
-```powershell
-.\scripts\tag_release.ps1 0.1.3
-```
-
-Important notes:
-
-- The LuaSkill runtime identity comes from the packaged top-level directory name, not from the GitHub repository name alone.
-- If you only rename the GitHub repository but keep the packaged skill directory as `demo-skill`, the installed `skill_id` still remains `demo-skill`.
-- Always make sure the package root directory, release asset names, and documentation all match your final skill id before publishing.
-
-## Release packaging
-
-After the tag is pushed, the release workflow produces:
-
-- `<skill-id>-v<version>-skill.zip`
-- `<skill-id>-v<version>-checksums.txt`
-
-The zip file always expands to one top-level directory named exactly:
-
-```text
-demo-skill/
+./scripts/tag_release.sh 0.1.0
 ```
 
 ## Notes
 
-- Runtime output is intentionally English-only.
-- Code comments inside source files follow the rule: English line first, Chinese line second.
-- The repository root itself is the skill root, and the skill id is the directory name.
-- The optional `source.yaml` is reserved for URL-based install flows, self-hosted package endpoints, and future skillhub-compatible metadata responses rather than GitHub release publication.
+- The repository root is the skill root.
+- The installed skill id is derived from the package root directory name: `vulcan-testkit`.
+- Runtime code does not bundle external validation tools; it routes tools already available in the caller environment.
+- Runtime output is designed for AI agents: compact, source-oriented, and explicit about blocked or malformed validation calls.
