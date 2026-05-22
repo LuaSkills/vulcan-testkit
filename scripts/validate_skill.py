@@ -5,6 +5,7 @@ Validate the vulcan-testkit LuaSkill repository against strict package rules.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -54,6 +55,17 @@ def load_yaml(path: Path) -> dict:
 
 
 """
+Load one JSON object from disk.
+从磁盘加载一份 JSON 对象。
+"""
+def load_json_object(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    require(isinstance(payload, dict), f"Expected one JSON object in {path}")
+    return payload
+
+
+"""
 Validate the strict top-level repository layout.
 校验严格的顶层仓库目录结构。
 """
@@ -97,6 +109,30 @@ def validate_manifest(root: Path) -> None:
         require(isinstance(entry_name, str) and entry_name, "Each entry requires a non-empty name")
         require(isinstance(lua_entry, str) and lua_entry, f"Entry '{entry_name}' requires lua_entry")
         require((root / lua_entry).is_file(), f"Entry '{entry_name}' points to a missing file: {lua_entry}")
+        input_schema = entry.get("input_schema")
+        input_schema_file = entry.get("input_schema_file")
+        has_inline_schema = input_schema is not None
+        has_schema_file = isinstance(input_schema_file, str) and bool(input_schema_file.strip())
+        require(
+            not (has_inline_schema and has_schema_file),
+            f"Entry '{entry_name}' must not declare both input_schema and input_schema_file",
+        )
+        if has_inline_schema:
+            require(isinstance(input_schema, dict), f"Entry '{entry_name}' input_schema must be one YAML object")
+            require(input_schema.get("type") == "object", f"Entry '{entry_name}' input_schema.type must be object")
+        if has_schema_file:
+            normalized_schema_path = input_schema_file.replace("\\", "/").strip()
+            require(
+                normalized_schema_path.startswith("schemas/"),
+                f"Entry '{entry_name}' input_schema_file must live under schemas/",
+            )
+            schema_path = root / Path(input_schema_file)
+            require(schema_path.is_file(), f"Entry '{entry_name}' points to a missing schema file: {input_schema_file}")
+            schema_payload = load_json_object(schema_path)
+            require(
+                schema_payload.get("type") == "object",
+                f"Entry '{entry_name}' input_schema_file root type must be object",
+            )
 
     help_block = manifest.get("help", {})
     main_help = help_block.get("main")
